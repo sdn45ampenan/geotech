@@ -1,0 +1,2188 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoAR Learning</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <!-- Import model-viewer component for 3D models -->
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f0f9ff;
+            overflow-x: hidden;
+        }
+        .mode-selection {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        }
+        .ar-content {
+            transition: all 0.3s ease;
+        }
+        .ar-content:hover {
+            transform: scale(1.05);
+        }
+        .compass-arrow {
+            transition: transform 0.5s ease;
+        }
+        #teacher-map, #student-map {
+            height: 100%;
+            width: 100%;
+            border-radius: 12px;
+        }
+        .camera-feed {
+            position: relative;
+            overflow: hidden;
+            border-radius: 12px;
+            background-color: #000;
+        }
+        .camera-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+            perspective: 1000px;
+            transform-style: preserve-3d;
+        }
+        .ar-object {
+            position: absolute;
+            transform-style: preserve-3d;
+            pointer-events: auto;
+            transition: opacity 0.3s ease;
+        }
+        .ar-object-content {
+            position: relative;
+            padding: 15px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            transform-origin: center;
+            transform-style: preserve-3d;
+            backface-visibility: hidden;
+            max-width: 300px;
+            min-width: 150px;
+        }
+        .ar-object-anchor {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: rgba(37, 99, 235, 0.9);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 10px rgba(37, 99, 235, 0.5);
+        }
+        .ar-object-anchor::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: rgba(37, 99, 235, 0.3);
+            transform: translate(-50%, -50%);
+            animation: pulse 2s infinite;
+        }
+        .ar-indicator {
+            position: absolute;
+            padding: 8px 12px;
+            background-color: rgba(37, 99, 235, 0.9);
+            color: white;
+            border-radius: 20px;
+            font-weight: 500;
+            transform: translate(-50%, -50%);
+            z-index: 20;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            pointer-events: auto;
+        }
+        .direction-arrow {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 60px;
+            background-color: rgba(37, 99, 235, 0.9);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .arrow {
+            width: 30px;
+            height: 30px;
+            border-top: 6px solid white;
+            border-right: 6px solid white;
+            transform-origin: center;
+        }
+        .nearby-notification {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(37, 99, 235, 0.9);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            z-index: 20;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .content-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .map-loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            border-radius: 12px;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(59, 130, 246, 0.3);
+            border-radius: 50%;
+            border-top-color: #3b82f6;
+            animation: spin 1s linear infinite;
+            margin-bottom: 10px;
+        }
+        .location-button {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            background-color: white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .location-button:hover {
+            background-color: #f3f4f6;
+            transform: scale(1.05);
+        }
+        .ar-anchor-settings {
+            border-top: 1px solid #e5e7eb;
+            padding-top: 1rem;
+            margin-top: 1rem;
+        }
+        .map-control-button {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background-color: white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .map-control-button:hover {
+            background-color: #f3f4f6;
+            transform: scale(1.05);
+        }
+        .compass-container {
+            position: absolute;
+            top: 80px;
+            left: 20px;
+            z-index: 900;
+            background-color: white;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .compass-needle {
+            position: absolute;
+            width: 4px;
+            height: 24px;
+            background: linear-gradient(to bottom, #dc2626 50%, #1d4ed8 50%);
+            transform-origin: center;
+            transition: transform 0.3s ease;
+        }
+        .compass-circle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: #fff;
+            border: 2px solid #6b7280;
+            border-radius: 50%;
+        }
+        .debug-info {
+            position: absolute;
+            bottom: 160px;
+            left: 10px;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 5px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            z-index: 900;
+            max-width: 200px;
+        }
+        .back-button {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background-color: white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+        }
+        .top-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            gap: 10px;
+        }
+        .control-button {
+            background-color: white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+        }
+        .place-button {
+            position: absolute;
+            bottom: 80px;
+            right: 20px;
+            z-index: 1000;
+            background-color: #10b981;
+            color: white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .place-button:hover {
+            background-color: #059669;
+            transform: scale(1.05);
+        }
+        .coordinate-display {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            z-index: 2000;
+            max-width: 90%;
+            width: 400px;
+        }
+        .coordinate-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .coordinate-item:last-child {
+            border-bottom: none;
+        }
+        .copy-button {
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .copy-button:hover {
+            background-color: #2563eb;
+        }
+        .copy-button.copied {
+            background-color: #10b981;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+            0% { transform: translate(-50%, -50%) scale(0.5); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+        }
+        .calibration-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+        .calibration-animation {
+            width: 200px;
+            height: 200px;
+            margin: 20px 0;
+            position: relative;
+        }
+        .calibration-phone {
+            width: 80px;
+            height: 140px;
+            background-color: #3b82f6;
+            border-radius: 10px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            animation: rotate-phone 4s infinite ease-in-out;
+        }
+        .ar-content-display {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 400px;
+            background-color: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            z-index: 950;
+            max-height: 40vh;
+            overflow-y: auto;
+        }
+        .ar-content-display h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #1e3a8a;
+        }
+        .ar-content-display .close-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background-color: #f3f4f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        .ar-object-3d {
+            position: absolute;
+            transform-style: preserve-3d;
+            pointer-events: auto;
+        }
+        .ar-object-3d-model {
+            width: 100px;
+            height: 100px;
+            background-color: rgba(37, 99, 235, 0.7);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            transform-origin: center;
+            transform-style: preserve-3d;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            animation: float 3s infinite ease-in-out;
+        }
+        .ar-object-image {
+            max-width: 200px;
+            max-height: 200px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+        .ar-object-video {
+            width: 200px;
+            height: 150px;
+            background-color: #000;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+        .ar-object-presentation {
+            width: 240px;
+            height: 180px;
+            background-color: #fff;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            border: 1px solid #ddd;
+            overflow: hidden;
+        }
+        .ar-object-text {
+            padding: 15px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            max-width: 250px;
+        }
+        .ar-object-floating {
+            animation: float 3s infinite ease-in-out;
+        }
+        .treasure-box {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(45deg, #8B4513, #D2691E);
+            border-radius: 8px;
+            position: relative;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+            border: 3px solid #654321;
+            animation: treasureGlow 2s infinite ease-in-out;
+        }
+        .treasure-box::before {
+            content: '';
+            position: absolute;
+            top: -8px;
+            left: 10%;
+            right: 10%;
+            height: 16px;
+            background: linear-gradient(45deg, #FFD700, #FFA500);
+            border-radius: 8px 8px 0 0;
+            border: 2px solid #B8860B;
+        }
+        .treasure-box::after {
+            content: '🔒';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        .treasure-box.opened::after {
+            content: '✨';
+            animation: sparkle 1s infinite;
+        }
+        .treasure-box.can-open {
+            animation: treasureReady 1s infinite ease-in-out;
+            box-shadow: 0 8px 20px rgba(255, 215, 0, 0.6);
+        }
+        .treasure-box.can-open::before {
+            background: linear-gradient(45deg, #FFD700, #FFFF00);
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.8);
+        }
+        .ar-object-revealed {
+            animation: revealContent 1s ease-out;
+            transform-origin: center bottom;
+        }
+        .open-box-button {
+            position: absolute;
+            bottom: -40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(45deg, #FFD700, #FFA500);
+            color: #8B4513;
+            border: none;
+            border-radius: 20px;
+            padding: 8px 16px;
+            font-weight: bold;
+            font-size: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            animation: buttonPulse 1.5s infinite;
+        }
+        .distance-requirement {
+            position: absolute;
+            bottom: -40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            border-radius: 15px;
+            padding: 4px 12px;
+            font-size: 10px;
+            white-space: nowrap;
+        }
+        @keyframes float {
+            0% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-10px) rotate(2deg); }
+            100% { transform: translateY(0px) rotate(0deg); }
+        }
+        @keyframes treasureGlow {
+            0% { box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3); }
+            50% { box-shadow: 0 8px 25px rgba(139, 69, 19, 0.5); }
+            100% { box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3); }
+        }
+        @keyframes treasureReady {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        @keyframes sparkle {
+            0% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(1.2); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+        @keyframes revealContent {
+            0% { 
+                opacity: 0; 
+                transform: scale(0.3) translateY(50px); 
+            }
+            50% { 
+                opacity: 0.8; 
+                transform: scale(1.1) translateY(-10px); 
+            }
+            100% { 
+                opacity: 1; 
+                transform: scale(1) translateY(0px); 
+            }
+        }
+        @keyframes buttonPulse {
+            0% { transform: translateX(-50%) scale(1); }
+            50% { transform: translateX(-50%) scale(1.05); }
+            100% { transform: translateX(-50%) scale(1); }
+        }
+        @keyframes rotate-phone {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            25% { transform: translate(-50%, -50%) rotate(90deg); }
+            50% { transform: translate(-50%, -50%) rotate(180deg); }
+            75% { transform: translate(-50%, -50%) rotate(270deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        .ar-object-label {
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(37, 99, 235, 0.9);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        .ar-object-distance {
+            position: absolute;
+            bottom: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+        }
+        .world-anchored-object {
+            position: absolute;
+            transform-style: preserve-3d;
+            pointer-events: auto;
+            z-index: 100;
+        }
+        .world-anchored-content {
+            transform-style: preserve-3d;
+            backface-visibility: hidden;
+        }
+        .world-anchored-3d {
+            width: 200px;
+            height: 200px;
+            transform-style: preserve-3d;
+        }
+        .world-anchored-image {
+            max-width: 300px;
+            max-height: 300px;
+            border-radius: 10px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+        .world-anchored-video {
+            width: 320px;
+            height: 240px;
+            background-color: #000;
+            border-radius: 10px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .ar-view-mode-toggle {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 1000;
+            background-color: white;
+            border-radius: 20px;
+            padding: 8px 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            font-weight: 500;
+            color: #2563eb;
+        }
+        model-viewer {
+            width: 100%;
+            height: 300px;
+            background-color: #f3f4f6;
+            --poster-color: #f3f4f6;
+        }
+        .presentation-controls {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
+        .presentation-controls button {
+            background-color: #4f46e5;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 12px;
+            cursor: pointer;
+        }
+        .presentation-controls button:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+        }
+        .presentation-slide {
+            width: 100%;
+            height: 300px;
+            background-color: #f3f4f6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .presentation-slide iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .presentation-slide img {
+            max-width: 100%;
+            max-height: 100%;
+        }
+        .slide-counter {
+            text-align: center;
+            margin-top: 8px;
+            font-size: 14px;
+            color: #4b5563;
+        }
+        .youtube-container {
+            position: relative;
+            width: 100%;
+            padding-bottom: 56.25%; /* 16:9 aspect ratio */
+            height: 0;
+            overflow: hidden;
+            border-radius: 8px;
+        }
+        .youtube-container iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="app" class="min-h-screen">
+        <!-- Loading Screen -->
+        <div id="loading-screen" class="mode-selection min-h-screen flex flex-col items-center justify-center p-6 text-white">
+            <div class="text-center mb-12">
+                <h1 class="text-4xl font-bold mb-2">GeoAR Learning</h1>
+                <p class="text-xl opacity-90">Memuat konten AR...</p>
+            </div>
+            <div class="spinner mb-4"></div>
+            <p id="loading-status" class="text-lg opacity-80">Mengambil data dari server...</p>
+        </div>
+
+        <!-- Student Mode -->
+        <div id="student-mode" class="hidden min-h-screen bg-gray-100">
+            <!-- Camera View -->
+            <div id="camera-view" class="relative h-screen">
+                <div class="camera-feed h-full w-full">
+                    <video id="camera-feed" class="h-full w-full object-cover" autoplay playsinline></video>
+                    <div class="camera-overlay" id="ar-overlay"></div>
+                    
+                    <!-- Back button - moved to top left and above compass -->
+                    <div class="back-button" onclick="location.reload()">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    </div>
+                    
+                    <!-- Top controls - moved to right side -->
+                    <div class="top-controls">
+                        <div class="control-button" onclick="toggleView('map')">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                            </svg>
+                        </div>
+                        <div class="control-button" onclick="showContentList()">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                            </svg>
+                        </div>
+                        <div class="control-button" onclick="toggleDebugInfo()">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+
+                    </div>
+                    
+                    <!-- Compass - moved below back button -->
+                    <div class="compass-container">
+                        <div class="compass-needle" id="compass-needle"></div>
+                        <div class="compass-circle"></div>
+                    </div>
+                    
+                    <!-- Direction arrow -->
+                    <div class="direction-arrow" id="direction-arrow">
+                        <div class="arrow" id="arrow"></div>
+                    </div>
+                    
+                    <!-- Distance indicator -->
+                    <div class="absolute bottom-20 left-0 right-0 text-center text-white text-lg font-semibold" id="distance-indicator">
+                        Mencari konten terdekat...
+                    </div>
+                    
+                    <!-- Debug info - hidden by default -->
+                    <div class="debug-info hidden" id="debug-info">
+                        Arah: 0°<br>
+                        Target: N/A<br>
+                        Bearing: N/A
+                    </div>
+                    
+                    <!-- AR View Mode Toggle -->
+                    <div class="ar-view-mode-toggle" onclick="toggleARViewMode()">
+                        <span id="ar-view-mode-text">Tampilan AR: Dunia Nyata</span>
+                    </div>
+                    
+
+                </div>
+                
+                <!-- Calibration button - moved to top right with other controls -->
+                <div class="absolute top-80 right-4 z-1000">
+                    <button onclick="showCalibration()" class="bg-white text-blue-600 px-3 py-2 rounded-lg shadow-md text-sm">
+                        📍 Kalibrasi
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Map View -->
+            <div id="map-view" class="hidden h-screen relative">
+                <div id="student-map" class="h-full w-full"></div>
+                
+                <!-- Back button -->
+                <div class="back-button" onclick="location.reload()">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                </div>
+                
+                <!-- Camera button -->
+                <div class="map-control-button" onclick="toggleView('camera')">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                </div>
+                
+
+                
+                <!-- Location button -->
+                <div class="location-button" id="student-use-current-location">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                </div>
+            </div>
+            
+            <!-- Content List Modal -->
+            <div id="content-list-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-end justify-center">
+                <div class="bg-white rounded-t-xl w-full max-w-md max-h-[70vh] overflow-hidden">
+                    <div class="p-4 border-b border-gray-200 flex justify-between items-center">
+                        <h3 class="text-lg font-semibold">Konten AR Terdekat</h3>
+                        <button onclick="hideContentList()" class="text-gray-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="content-list p-4" id="nearby-content-list">
+                        <!-- Content will be added here dynamically -->
+                        <div class="text-center py-8 text-gray-500">
+                            Tidak ada konten AR terdekat
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+
+            
+            <!-- Compass Calibration Modal -->
+            <div id="calibration-overlay" class="hidden calibration-overlay">
+                <h2 class="text-2xl font-bold mb-2">Kalibrasi Kompas Anda</h2>
+                <p class="mb-4">Untuk posisi AR yang akurat, silakan putar perangkat Anda dalam pola angka 8</p>
+                
+                <div class="calibration-animation">
+                    <div class="calibration-phone"></div>
+                </div>
+                
+                <p class="mb-6">Terus putar hingga animasi selesai</p>
+                
+                <button onclick="finishCalibration()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg transition-all">
+                    Saya Sudah Selesai Kalibrasi
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let currentMode = null;
+        let teacherMap = null;
+        let studentMap = null;
+        let currentPosition = null;
+        let watchPositionId = null;
+        let selectedPin = null;
+        let arContents = [];
+        let currentHeading = 0;
+        let targetARContent = null;
+        let cameraStream = null;
+        let teacherMapInitialized = false;
+        let studentMapInitialized = false;
+        let compassCalibrated = false;
+        let compassOffset = 0;
+        let absoluteHeading = 0;
+        let useAbsoluteHeading = false;
+        let currentlyDisplayedContent = null;
+        let lastNearbyContent = [];
+        let arViewMode = "realworld"; // "realworld" or "indicator"
+        let deviceOrientation = { alpha: 0, beta: 0, gamma: 0 };
+        let arObjects = [];
+        let lastUpdateTime = 0;
+        let animationFrameId = null;
+        let presentationSlides = {}; // Store presentation slides data
+        let currentPresentationState = {}; // Store current slide index for presentations
+        let openedBoxes = new Set(); // Track which boxes have been opened
+        let boxOpenDistance = 15; // Distance in meters to allow box opening
+
+
+        // Initialize the application
+        function initApp() {
+            // Show loading screen
+            document.getElementById('loading-screen').classList.remove('hidden');
+            
+            // Load CSV data and then start student mode
+            loadCSVData();
+            
+            // Check if device supports DeviceOrientationEvent with absolute values
+            if (window.DeviceOrientationEvent) {
+                window.addEventListener('deviceorientationabsolute', function(event) {
+                    useAbsoluteHeading = true;
+                    handleOrientation(event);
+                    deviceOrientation = {
+                        alpha: event.alpha || 0,
+                        beta: event.beta || 0,
+                        gamma: event.gamma || 0
+                    };
+                });
+            }
+        }
+
+        // Load CSV data from Google Sheets
+        async function loadCSVData() {
+            const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSCPrAyjTP4O7lSWJnouA4Ysnd5U88mcM-dWyJG0Nv9eWOA3yVKrGJ1-5G_QDdEcTNpwn0F5XbzeUJh/pub?gid=0&single=true&output=csv';
+            
+            try {
+                document.getElementById('loading-status').textContent = 'Mengambil data dari server...';
+                
+                const response = await fetch(csvUrl);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const csvText = await response.text();
+                document.getElementById('loading-status').textContent = 'Memproses konten AR...';
+                
+                // Parse CSV data
+                const lines = csvText.trim().split('\n');
+                const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+                
+                // Find column indices
+                const nameIndex = headers.findIndex(h => h.includes('name') || h.includes('title') || h.includes('nama'));
+                const latIndex = headers.findIndex(h => h.includes('lat'));
+                const lonIndex = headers.findIndex(h => h.includes('lon') || h.includes('lng'));
+                const urlIndex = headers.findIndex(h => h.includes('url'));
+                const descIndex = urlIndex + 1; // Description is after URL column
+                
+                if (nameIndex === -1 || latIndex === -1 || lonIndex === -1 || urlIndex === -1) {
+                    throw new Error('Kolom yang diperlukan tidak ditemukan dalam CSV. Diharapkan: name, lat, lon, url');
+                }
+                
+                // Clear existing AR contents
+                arContents = [];
+                
+                // Process each row
+                for (let i = 1; i < lines.length; i++) {
+                    const row = lines[i].split(',').map(cell => cell.trim());
+                    
+                    if (row.length >= Math.max(nameIndex, latIndex, lonIndex, urlIndex) + 1) {
+                        const name = row[nameIndex];
+                        const lat = parseFloat(row[latIndex]);
+                        const lon = parseFloat(row[lonIndex]);
+                        const url = row[urlIndex];
+                        const description = row[descIndex] || ''; // Get description from column after URL
+                        
+                        // Validate data
+                        if (name && !isNaN(lat) && !isNaN(lon) && url) {
+                            // Determine content type based on URL
+                            let contentType = 'image'; // default
+                            let processedContent = url;
+                            
+                            if (url.includes('youtube.com') || url.includes('youtu.be')) {
+                                contentType = 'video';
+                                processedContent = extractYouTubeID(url);
+                            } else if (url.toLowerCase().includes('.glb') || url.toLowerCase().includes('.gltf')) {
+                                contentType = '3d';
+                            } else if (url.includes(',')) {
+                                // Multiple URLs - treat as presentation
+                                contentType = 'presentation';
+                                const slides = url.split(',').map(u => u.trim()).filter(u => u);
+                                processedContent = JSON.stringify(slides);
+                            }
+                            
+                            const arContent = {
+                                id: `csv_${i}_${Date.now()}`,
+                                title: name,
+                                type: contentType,
+                                content: processedContent,
+                                description: description, // Add description field
+                                lat: lat,
+                                lng: lon,
+                                radius: 50, // default radius
+                                height: 1.5, // default height
+                                anchorType: 'fixed',
+                                scale: 1.0,
+                                rotation: 0
+                            };
+                            
+                            arContents.push(arContent);
+                        }
+                    }
+                }
+                
+                document.getElementById('loading-status').textContent = `Memuat ${arContents.length} lokasi AR!`;
+                
+                // Save to localStorage for offline use
+                saveARContentsToStorage();
+                
+                // Wait a moment then start student mode
+                setTimeout(() => {
+                    document.getElementById('loading-screen').classList.add('hidden');
+                    document.getElementById('student-mode').classList.remove('hidden');
+                    currentMode = 'student';
+                    initStudentMode();
+                }, 1500);
+                
+            } catch (error) {
+                console.error('Error loading CSV data:', error);
+                document.getElementById('loading-status').textContent = 'Gagal memuat data. Menggunakan konten offline...';
+                
+                // Try to load from localStorage as fallback
+                loadARContents();
+                
+                // If no offline content, show error
+                if (arContents.length === 0) {
+                    document.getElementById('loading-status').textContent = 'Tidak ada konten AR tersedia. Silakan periksa koneksi Anda.';
+                    setTimeout(() => {
+                        location.reload();
+                    }, 3000);
+                } else {
+                    setTimeout(() => {
+                        document.getElementById('loading-screen').classList.add('hidden');
+                        document.getElementById('student-mode').classList.remove('hidden');
+                        currentMode = 'student';
+                        initStudentMode();
+                    }, 2000);
+                }
+            }
+        }
+
+        // Get current location
+        function getCurrentLocation(centerMap = false) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const { latitude, longitude, accuracy } = position.coords;
+                    currentPosition = { 
+                        lat: latitude, 
+                        lng: longitude,
+                        accuracy: accuracy 
+                    };
+                    
+                    if (currentMode === 'student') {
+                        if (studentMap) {
+                            studentMap.setView([latitude, longitude], 18);
+                            updateStudentMapMarkers();
+                        }
+                        
+                        // Check for nearby AR content
+                        checkNearbyARContent();
+                    }
+                },
+                (error) => {
+                    console.error('Error getting location:', error);
+                    alert('Tidak dapat mendapatkan lokasi Anda. Silakan aktifkan layanan lokasi.');
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        }
+
+        // Extract YouTube video ID from various URL formats
+        function extractYouTubeID(url) {
+            // If it's already just an ID (no slashes or dots)
+            if (/^[a-zA-Z0-9_-]{11}$/.test(url)) {
+                return url;
+            }
+            
+            // Try to extract from various YouTube URL formats
+            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+            const match = url.match(regExp);
+            
+            if (match && match[2].length === 11) {
+                return match[2];
+            }
+            
+            // If we can't extract an ID, just return the original URL
+            return url;
+        }
+
+        // Save AR contents to local storage
+        function saveARContentsToStorage() {
+            localStorage.setItem('arContents', JSON.stringify(arContents));
+        }
+
+        // Load AR contents from local storage
+        function loadARContents() {
+            const storedContents = localStorage.getItem('arContents');
+            if (storedContents) {
+                arContents = JSON.parse(storedContents);
+                updateARMarkers();
+                updateARContentList();
+            }
+        }
+
+        // Update AR markers on the map
+        function updateARMarkers() {
+            // Update student map if active
+            if (studentMap && currentPosition) {
+                updateStudentMapMarkers();
+            }
+        }
+
+        // Get icon for content type
+        function getContentTypeIcon(type) {
+            switch (type) {
+                case 'text': return 'T';
+                case 'image': return 'G';
+                case '3d': return '3D';
+                case 'video': return 'V';
+                case 'presentation': return 'P';
+                default: return '?';
+            }
+        }
+
+        // Truncate text
+        function truncateText(text, maxLength) {
+            if (text.length <= maxLength) return text;
+            return text.substring(0, maxLength) + '...';
+        }
+
+        // Initialize student mode
+        function initStudentMode() {
+            // Start camera
+            startCamera();
+            
+            // Initialize the map
+            if (!studentMapInitialized) {
+                studentMap = L.map('student-map').setView([0, 0], 18);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                }).addTo(studentMap);
+                
+                studentMapInitialized = true;
+                
+                // Add event listener for "Use Current Location" button
+                document.getElementById('student-use-current-location').addEventListener('click', () => {
+                    if (currentPosition) {
+                        studentMap.setView([currentPosition.lat, currentPosition.lng], 18);
+                    }
+                });
+            }
+            
+            // Start tracking location
+            startLocationTracking();
+            
+            // Start orientation tracking
+            startOrientationTracking();
+            
+            // Load AR contents and opened boxes
+            loadARContents();
+            loadOpenedBoxes();
+            
+            // Start AR rendering loop
+            startARRenderingLoop();
+        }
+
+        // Start camera
+        function startCamera() {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+                    .then(stream => {
+                        const videoElement = document.getElementById('camera-feed');
+                        videoElement.srcObject = stream;
+                        cameraStream = stream;
+                    })
+                    .catch(error => {
+                        console.error('Error accessing camera:', error);
+                        alert('Tidak dapat mengakses kamera. Silakan izinkan akses kamera.');
+                    });
+            } else {
+                alert('Browser Anda tidak mendukung akses kamera.');
+            }
+        }
+
+        // Stop camera
+        function stopCamera() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+            }
+        }
+
+        // Start location tracking
+        function startLocationTracking() {
+            if (navigator.geolocation) {
+                watchPositionId = navigator.geolocation.watchPosition(
+                    (position) => {
+                        const { latitude, longitude, accuracy } = position.coords;
+                        currentPosition = { 
+                            lat: latitude, 
+                            lng: longitude,
+                            accuracy: accuracy 
+                        };
+                        
+                        // Update student map
+                        if (studentMap) {
+                            studentMap.setView([latitude, longitude], 18);
+                            updateStudentMapMarkers();
+                        }
+                        
+                        // Check for nearby AR content
+                        checkNearbyARContent();
+                    },
+                    (error) => {
+                        console.error('Error tracking location:', error);
+                    },
+                    { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+                );
+            } else {
+                alert('Geolokasi tidak didukung oleh browser Anda.');
+            }
+        }
+
+        // Start orientation tracking
+        function startOrientationTracking() {
+            if (window.DeviceOrientationEvent) {
+                if (!useAbsoluteHeading) {
+                    window.addEventListener('deviceorientation', handleOrientation);
+                }
+            } else {
+                alert('Orientasi perangkat tidak didukung oleh browser Anda.');
+            }
+        }
+        
+        // Handle orientation event
+        function handleOrientation(event) {
+            // Use alpha for compass heading (0-360)
+            if (event.alpha !== null) {
+                if (useAbsoluteHeading) {
+                    // For devices that support absolute orientation
+                    absoluteHeading = event.alpha;
+                    currentHeading = (360 - absoluteHeading) % 360;
+                } else {
+                    // For devices without absolute orientation
+                    currentHeading = (event.alpha + compassOffset) % 360;
+                }
+                
+                // Store device orientation data
+                deviceOrientation = {
+                    alpha: event.alpha || 0,
+                    beta: event.beta || 0,
+                    gamma: event.gamma || 0
+                };
+                
+                // Update compass needle
+                const compassNeedle = document.getElementById('compass-needle');
+                compassNeedle.style.transform = `rotate(${currentHeading}deg)`;
+                
+                // Update direction arrow
+                updateDirectionArrow();
+                
+                // Update debug info
+                updateDebugInfo();
+            }
+        }
+        
+        // Show calibration overlay
+        function showCalibration() {
+            document.getElementById('calibration-overlay').classList.remove('hidden');
+        }
+        
+        // Finish calibration
+        function finishCalibration() {
+            document.getElementById('calibration-overlay').classList.add('hidden');
+            compassCalibrated = true;
+            
+            // If we're using non-absolute orientation, try to calibrate using device position
+            if (!useAbsoluteHeading && currentPosition) {
+                // Request a high-accuracy position to get heading if available
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        if (position.coords.heading !== null && position.coords.heading !== undefined) {
+                            // If device provides heading, use it to calibrate
+                            const deviceHeading = position.coords.heading;
+                            compassOffset = (deviceHeading - currentHeading + 360) % 360;
+                            console.log('Calibrated compass with device heading:', deviceHeading, 'Offset:', compassOffset);
+                        }
+                    },
+                    (error) => {
+                        console.log('Could not get heading from position:', error);
+                    },
+                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                );
+            }
+        }
+
+
+
+        // Update student map markers
+        function updateStudentMapMarkers() {
+            // Clear existing markers
+            studentMap.eachLayer((layer) => {
+                if (layer instanceof L.Marker || layer instanceof L.Circle) {
+                    studentMap.removeLayer(layer);
+                }
+            });
+            
+            // Add current position marker
+            L.marker([currentPosition.lat, currentPosition.lng], {
+                icon: L.divIcon({
+                    className: 'current-position-marker',
+                    html: `<div class="w-4 h-4 bg-blue-600 rounded-full border-2 border-white"></div>`,
+                    iconSize: [20, 20],
+                    iconAnchor: [10, 10]
+                })
+            }).addTo(studentMap);
+            
+            // Add accuracy circle
+            L.circle([currentPosition.lat, currentPosition.lng], {
+                radius: currentPosition.accuracy,
+                color: '#3b82f6',
+                fillColor: '#3b82f6',
+                fillOpacity: 0.1,
+                weight: 1,
+                isAccuracyCircle: true
+            }).addTo(studentMap);
+            
+            // Add AR content markers
+            arContents.forEach(content => {
+                const marker = L.marker([content.lat, content.lng], {
+                    icon: L.divIcon({
+                        className: 'ar-marker',
+                        html: `<div class="w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-bold border-2 border-white">${getContentTypeIcon(content.type)}</div>`,
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12]
+                    })
+                }).addTo(studentMap);
+                
+                // Add circle for radius
+                L.circle([content.lat, content.lng], {
+                    radius: content.radius,
+                    color: '#4f46e5',
+                    fillColor: '#4f46e5',
+                    fillOpacity: 0.1,
+                    weight: 1
+                }).addTo(studentMap);
+                
+                // Add click event
+                marker.on('click', () => {
+                    // Set as navigation target
+                    targetARContent = content;
+                    updateDirectionArrow();
+                    
+                    // Show notification
+                    alert(`Navigasi ke: ${content.title}`);
+                    
+                    // Switch to camera view
+                    toggleView('camera');
+                });
+            });
+            
+            // If we have a target, draw a line to it
+            if (targetARContent) {
+                L.polyline([
+                    [currentPosition.lat, currentPosition.lng],
+                    [targetARContent.lat, targetARContent.lng]
+                ], {
+                    color: '#4f46e5',
+                    weight: 3,
+                    dashArray: '5, 10',
+                    opacity: 0.8
+                }).addTo(studentMap);
+            }
+        }
+
+        // Check for nearby AR content
+        function checkNearbyARContent() {
+            if (!currentPosition) return;
+            
+            const overlay = document.getElementById('ar-overlay');
+            
+            let nearbyContent = [];
+            let closestDistance = Infinity;
+            let closestContent = null;
+            
+            arContents.forEach(content => {
+                const distance = calculateDistance(
+                    currentPosition.lat, currentPosition.lng,
+                    content.lat, content.lng
+                );
+                
+                content.distance = distance;
+                
+                if (distance <= content.radius) {
+                    nearbyContent.push(content);
+                }
+                
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestContent = content;
+                }
+            });
+            
+            // Update distance indicator
+            const distanceIndicator = document.getElementById('distance-indicator');
+            if (closestContent) {
+                distanceIndicator.textContent = `${closestContent.title}: ${Math.round(closestContent.distance)}m`;
+                
+                // If no target is set, set closest as target
+                if (!targetARContent) {
+                    targetARContent = closestContent;
+                }
+            } else {
+                distanceIndicator.textContent = 'Tidak ada konten AR terdekat';
+            }
+            
+            // Update nearby content list
+            updateNearbyContentList(nearbyContent);
+            
+            // Update debug info
+            updateDebugInfo();
+            
+            // Update AR objects
+            updateARObjects(nearbyContent);
+            
+            // Update lastNearbyContent
+            lastNearbyContent = nearbyContent;
+        }
+
+        // Update AR objects in the scene
+        function updateARObjects(nearbyContent) {
+            // Clear existing AR objects if view mode changed
+            if (arViewMode === "indicator") {
+                // Clear all AR objects
+                arObjects = [];
+                const overlay = document.getElementById('ar-overlay');
+                overlay.innerHTML = '';
+                
+                // Add AR indicators for nearby content
+                nearbyContent.forEach(content => {
+                    // Check if box is opened
+                    const isBoxOpened = openedBoxes.has(content.id);
+                    const canOpenBox = content.distance <= boxOpenDistance;
+                    
+                    // Add AR indicator to overlay
+                    const indicator = document.createElement('div');
+                    indicator.className = 'ar-indicator';
+                    
+                    // Show different text based on box state
+                    if (!isBoxOpened) {
+                        indicator.textContent = canOpenBox ? '🎁 Buka Kotak' : '🎁 Kotak Misterius';
+                        indicator.style.backgroundColor = canOpenBox ? 'rgba(255, 215, 0, 0.9)' : 'rgba(139, 69, 19, 0.9)';
+                        indicator.style.color = canOpenBox ? '#8B4513' : 'white';
+                    } else {
+                        indicator.textContent = content.title;
+                        indicator.style.backgroundColor = 'rgba(37, 99, 235, 0.9)';
+                        indicator.style.color = 'white';
+                    }
+                    
+                    // Calculate position in viewport based on bearing
+                    const bearing = calculateBearing(
+                        currentPosition.lat, currentPosition.lng,
+                        content.lat, content.lng
+                    );
+                    
+                    // Calculate relative bearing (difference between our heading and bearing to target)
+                    const relativeBearing = (bearing - currentHeading + 360) % 360;
+                    
+                    // Position horizontally based on relative bearing
+                    // Only show if within 120 degrees of view (60 degrees each side)
+                    if (relativeBearing < 60 || relativeBearing > 300) {
+                        // Map the relative bearing to viewport position
+                        // 0 degrees = center, -60/+60 degrees = edges
+                        let viewportX;
+                        if (relativeBearing < 60) {
+                            viewportX = 50 + (relativeBearing / 60) * 40;
+                        } else {
+                            viewportX = 50 - ((360 - relativeBearing) / 60) * 40;
+                        }
+                        
+                        // Position based on distance (closer = lower) and height setting
+                        const height = content.height || 1.5;
+                        // Adjust vertical position based on height and distance
+                        const viewportY = 50 - (height * 5) + (content.distance / content.radius) * 10;
+                        
+                        indicator.style.left = `${Math.max(10, Math.min(90, viewportX))}%`;
+                        indicator.style.top = `${Math.max(10, Math.min(70, viewportY))}%`;
+                        
+                        // Apply scale from AR settings
+                        const scale = content.scale || 1.0;
+                        indicator.style.transform = `translate(-50%, -50%) scale(${scale}) rotate(${content.rotation || 0}deg)`;
+                        
+                        indicator.addEventListener('click', () => {
+                            if (!isBoxOpened && canOpenBox) {
+                                openTreasureBox(content.id);
+                            } else if (isBoxOpened) {
+                                showARContent(content);
+                            } else {
+                                alert(`Anda perlu berada dalam jarak ${boxOpenDistance}m untuk membuka kotak harta karun ini. Jarak saat ini: ${Math.round(content.distance)}m`);
+                            }
+                        });
+                        
+                        overlay.appendChild(indicator);
+                    }
+                });
+            } else {
+                // Real-world AR view - create or update AR objects
+                const existingIds = arObjects.map(obj => obj.id);
+                const newContentIds = nearbyContent.map(content => content.id);
+                
+                // Remove objects that are no longer nearby
+                arObjects = arObjects.filter(obj => newContentIds.includes(obj.id));
+                
+                // Add new objects
+                nearbyContent.forEach(content => {
+                    if (!existingIds.includes(content.id)) {
+                        arObjects.push({
+                            id: content.id,
+                            content: content,
+                            element: null
+                        });
+                    }
+                });
+            }
+        }
+
+        // Start AR rendering loop
+        function startARRenderingLoop() {
+            function renderLoop() {
+                const now = Date.now();
+                if (now - lastUpdateTime > 50) { // Update at 20fps
+                    renderARObjects();
+                    lastUpdateTime = now;
+                }
+                animationFrameId = requestAnimationFrame(renderLoop);
+            }
+            
+            renderLoop();
+        }
+
+        // Render AR objects in the scene
+        function renderARObjects() {
+            if (arViewMode !== "realworld" || !currentPosition) return;
+            
+            const overlay = document.getElementById('ar-overlay');
+            overlay.innerHTML = '';
+            
+
+            
+            arObjects.forEach(arObject => {
+                const content = arObject.content;
+                
+                // Calculate position relative to viewer
+                const bearing = calculateBearing(
+                    currentPosition.lat, currentPosition.lng,
+                    content.lat, content.lng
+                );
+                
+                // Calculate relative bearing (difference between our heading and bearing to target)
+                const relativeBearing = (bearing - currentHeading + 360) % 360;
+                
+                // Only show if within field of view (120 degrees)
+                if (relativeBearing < 60 || relativeBearing > 300) {
+                    // Create AR object element
+                    const arObjectElement = document.createElement('div');
+                    arObjectElement.className = 'ar-object';
+                    
+                    // Calculate horizontal position based on relative bearing
+                    let viewportX;
+                    if (relativeBearing < 60) {
+                        viewportX = 50 + (relativeBearing / 60) * 40;
+                    } else {
+                        viewportX = 50 - ((360 - relativeBearing) / 60) * 40;
+                    }
+                    
+                    // Calculate distance and scale based on distance
+                    const distance = content.distance;
+                    const maxDistance = content.radius;
+                    
+                    // Calculate distance scale factor - objects grow as you get closer
+                    // At max radius, scale is 0.2x of configured size
+                    // At 0 distance, scale is 1.0x of configured size
+                    const distanceScaleFactor = 0.2 + (0.8 * (1 - Math.min(1, distance / maxDistance)));
+                    
+                    // Calculate vertical position based on height and device orientation
+                    const height = content.height || 1.5;
+                    const deviceTilt = deviceOrientation.beta || 0;
+                    const tiltAdjustment = (90 - deviceTilt) * 0.5;
+                    const viewportY = 50 - (height * 3) - tiltAdjustment;
+                    
+                    // Position the object - fixed in world space
+                    arObjectElement.style.left = `${Math.max(10, Math.min(90, viewportX))}%`;
+                    arObjectElement.style.top = `${Math.max(10, Math.min(80, viewportY))}%`;
+                    
+                    // Apply scale and rotation
+                    const userScale = content.scale || 1.0;
+                    const totalScale = distanceScaleFactor * userScale;
+                    const rotation = content.rotation || 0;
+                    
+                    // Check if box is opened
+                    const isBoxOpened = openedBoxes.has(content.id);
+                    const canOpenBox = distance <= boxOpenDistance;
+                    
+                    let contentElement;
+                    
+                    if (!isBoxOpened) {
+                        // Show treasure box
+                        contentElement = document.createElement('div');
+                        contentElement.className = `treasure-box ${canOpenBox ? 'can-open' : ''}`;
+                        
+                        // Add open button or distance requirement
+                        if (canOpenBox) {
+                            const openButton = document.createElement('button');
+                            openButton.className = 'open-box-button';
+                            openButton.textContent = 'Buka Kotak';
+                            openButton.addEventListener('click', (e) => {
+                                e.stopPropagation();
+                                openTreasureBox(content.id);
+                            });
+                            contentElement.appendChild(openButton);
+                        } else {
+                            const distanceReq = document.createElement('div');
+                            distanceReq.className = 'distance-requirement';
+                            distanceReq.textContent = `Dekati dalam ${boxOpenDistance}m`;
+                            contentElement.appendChild(distanceReq);
+                        }
+                    } else {
+                        // Show actual content with reveal animation
+                        if (content.type === 'text') {
+                            contentElement = document.createElement('div');
+                            contentElement.className = 'ar-object-text ar-object-revealed';
+                            contentElement.innerHTML = `<p>${content.content}</p>`;
+                        } else if (content.type === 'image') {
+                            contentElement = document.createElement('img');
+                            contentElement.className = 'ar-object-image ar-object-revealed';
+                            contentElement.src = content.content;
+                            contentElement.alt = content.title;
+                            contentElement.onerror = function() {
+                                this.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24" fill="none" stroke="%234f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>';
+                            };
+                        } else if (content.type === '3d') {
+                            contentElement = document.createElement('div');
+                            contentElement.className = 'ar-object-3d-model ar-object-revealed';
+                            contentElement.innerHTML = `
+                                <model-viewer src="${content.content}" 
+                                    alt="${content.title}" 
+                                    auto-rotate 
+                                    camera-controls 
+                                    shadow-intensity="1" 
+                                    ar 
+                                    ar-modes="webxr scene-viewer quick-look"
+                                    touch-action="pan-y"
+                                    style="width: 120px; height: 120px; background-color: transparent;">
+                                </model-viewer>
+                            `;
+                        } else if (content.type === 'video') {
+                            contentElement = document.createElement('div');
+                            contentElement.className = 'ar-object-video ar-object-revealed';
+                            contentElement.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
+                        } else if (content.type === 'presentation') {
+                            contentElement = document.createElement('div');
+                            contentElement.className = 'ar-object-presentation ar-object-revealed';
+                            contentElement.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>';
+                        }
+                    }
+                    
+                    // Add title label
+                    const label = document.createElement('div');
+                    label.className = 'ar-object-label';
+                    label.textContent = isBoxOpened ? content.title : '🎁 Kotak Misterius';
+                    
+                    // Add distance indicator
+                    const distanceElement = document.createElement('div');
+                    distanceElement.className = 'ar-object-distance';
+                    distanceElement.textContent = `${Math.round(distance)}m`;
+                    
+                    // Apply floating animation if specified
+                    if (content.anchorType === 'floating') {
+                        contentElement.classList.add('ar-object-floating');
+                    }
+                    
+                    // Apply transform - fixed in world space with perspective correction
+                    const perspectiveDistance = Math.max(100, 1000 - (distance * 10));
+                    arObjectElement.style.transform = `translate(-50%, -50%) scale(${totalScale}) perspective(${perspectiveDistance}px) rotateY(${relativeBearing < 60 ? relativeBearing * 0.5 : (360 - relativeBearing) * -0.5}deg) rotateX(${(deviceTilt - 90) * 0.3}deg) rotateZ(${rotation}deg)`;
+                    arObjectElement.style.transformStyle = 'preserve-3d';
+                    
+                    // Add elements to the DOM
+                    arObjectElement.appendChild(contentElement);
+                    arObjectElement.appendChild(label);
+                    arObjectElement.appendChild(distanceElement);
+                    
+                    // Add click event for opened boxes
+                    if (isBoxOpened) {
+                        arObjectElement.addEventListener('click', () => {
+                            showARContent(content);
+                        });
+                    }
+                    
+                    // Add to overlay
+                    overlay.appendChild(arObjectElement);
+                    
+                    // Store element reference
+                    arObject.element = arObjectElement;
+                }
+            });
+            
+
+        }
+
+        // Toggle AR view mode
+        function toggleARViewMode() {
+            if (arViewMode === "realworld") {
+                arViewMode = "indicator";
+                document.getElementById('ar-view-mode-text').textContent = "Tampilan AR: Indikator";
+            } else {
+                arViewMode = "realworld";
+                document.getElementById('ar-view-mode-text').textContent = "Tampilan AR: Dunia Nyata";
+            }
+            
+            // Update AR objects with current nearby content
+            updateARObjects(lastNearbyContent);
+        }
+
+        // Calculate distance between two points in meters
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // Earth radius in meters
+            const φ1 = lat1 * Math.PI / 180;
+            const φ2 = lat2 * Math.PI / 180;
+            const Δφ = (lat2 - lat1) * Math.PI / 180;
+            const Δλ = (lon2 - lon1) * Math.PI / 180;
+            
+            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                    Math.cos(φ1) * Math.cos(φ2) *
+                    Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            
+            return R * c;
+        }
+
+        // Calculate bearing between two points in degrees
+        function calculateBearing(lat1, lon1, lat2, lon2) {
+            const φ1 = lat1 * Math.PI / 180;
+            const φ2 = lat2 * Math.PI / 180;
+            const Δλ = (lon2 - lon1) * Math.PI / 180;
+            
+            const y = Math.sin(Δλ) * Math.cos(φ2);
+            const x = Math.cos(φ1) * Math.sin(φ2) -
+                    Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+            
+            let bearing = Math.atan2(y, x) * 180 / Math.PI;
+            bearing = (bearing + 360) % 360; // Normalize to 0-360
+            
+            return bearing;
+        }
+
+        // Update direction arrow
+        function updateDirectionArrow() {
+            if (!currentPosition || !targetARContent) return;
+            
+            const bearing = calculateBearing(
+                currentPosition.lat, currentPosition.lng,
+                targetARContent.lat, targetARContent.lng
+            );
+            
+            // Calculate relative bearing
+            const relativeBearing = (bearing - currentHeading + 360) % 360;
+            
+            // Rotate arrow - we need to adjust the transform because the arrow is initially pointing right
+            const arrow = document.getElementById('arrow');
+            arrow.style.transform = `rotate(${relativeBearing - 45}deg)`;
+            
+            // Update debug info
+            updateDebugInfo(bearing, relativeBearing);
+        }
+        
+        // Update debug info
+        function updateDebugInfo(bearing, relativeBearing) {
+            const debugInfo = document.getElementById('debug-info');
+            let debugText = `Arah: ${Math.round(currentHeading)}°`;
+            
+            if (targetARContent) {
+                const bearing = calculateBearing(
+                    currentPosition.lat, currentPosition.lng,
+                    targetARContent.lat, targetARContent.lng
+                );
+                const relativeBearing = (bearing - currentHeading + 360) % 360;
+                
+                debugText += `<br>Target: ${targetARContent.title}`;
+                debugText += `<br>Bearing: ${Math.round(bearing)}°`;
+                debugText += `<br>Relatif: ${Math.round(relativeBearing)}°`;
+                debugText += `<br>Jarak: ${Math.round(targetARContent.distance)}m`;
+            } else {
+                debugText += `<br>Target: N/A`;
+                debugText += `<br>Bearing: N/A`;
+            }
+            
+            if (useAbsoluteHeading) {
+                debugText += `<br>Mode: Absolut`;
+            } else {
+                debugText += `<br>Mode: Relatif`;
+                if (compassCalibrated) {
+                    debugText += ` (Terkalibrasi)`;
+                }
+            }
+            
+            debugText += `<br>Tampilan AR: ${arViewMode}`;
+            
+            debugInfo.innerHTML = debugText;
+        }
+
+        // Update nearby content list
+        function updateNearbyContentList(nearbyContent) {
+            const listContainer = document.getElementById('nearby-content-list');
+            
+            if (nearbyContent.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="text-center py-8 text-gray-500">
+                        Tidak ada konten AR terdekat
+                    </div>
+                `;
+                return;
+            }
+            
+            // Sort by distance
+            nearbyContent.sort((a, b) => a.distance - b.distance);
+            
+            listContainer.innerHTML = '';
+            
+            nearbyContent.forEach(content => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center justify-between p-3 border-b border-gray-200 last:border-0';
+                
+                const isBoxOpened = openedBoxes.has(content.id);
+                const canOpenBox = content.distance <= boxOpenDistance;
+                
+                let statusText = '';
+                let buttonText = 'Lihat';
+                let buttonClass = 'bg-blue-600 text-white';
+                
+                if (!isBoxOpened) {
+                    if (canOpenBox) {
+                        statusText = '🎁 Siap dibuka';
+                        buttonText = 'Buka Kotak';
+                        buttonClass = 'bg-yellow-500 text-white';
+                    } else {
+                        statusText = '🔒 Terkunci';
+                        buttonText = 'Dekati';
+                        buttonClass = 'bg-gray-400 text-white';
+                    }
+                } else {
+                    statusText = '✨ Terbuka';
+                }
+                
+                item.innerHTML = `
+                    <div class="flex items-center">
+                        <div class="w-8 h-8 rounded-full ${isBoxOpened ? 'bg-indigo-100 text-indigo-600' : 'bg-yellow-100 text-yellow-600'} flex items-center justify-center mr-3">
+                            ${isBoxOpened ? getContentTypeIcon(content.type) : '🎁'}
+                        </div>
+                        <div>
+                            <h4 class="font-medium text-gray-900">${isBoxOpened ? content.title : 'Kotak Misterius'}</h4>
+                            <p class="text-sm text-gray-500">${Math.round(content.distance)}m • ${statusText}</p>
+                        </div>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button class="view-btn ${buttonClass} px-3 py-1 rounded-md text-sm">${buttonText}</button>
+                        <button class="navigate-btn bg-gray-200 text-gray-800 px-3 py-1 rounded-md text-sm">Navigasi</button>
+                    </div>
+                `;
+                
+                // Add event listeners
+                item.querySelector('.view-btn').addEventListener('click', () => {
+                    hideContentList();
+                    if (!isBoxOpened && canOpenBox) {
+                        openTreasureBox(content.id);
+                    } else if (isBoxOpened) {
+                        showARContent(content);
+                    } else {
+                        alert(`Anda perlu berada dalam jarak ${boxOpenDistance}m untuk membuka kotak harta karun ini. Jarak saat ini: ${Math.round(content.distance)}m`);
+                    }
+                });
+                
+                item.querySelector('.navigate-btn').addEventListener('click', () => {
+                    hideContentList();
+                    targetARContent = content;
+                    updateDirectionArrow();
+                });
+                
+                listContainer.appendChild(item);
+            });
+        }
+
+        // Show content list modal
+        function showContentList() {
+            document.getElementById('content-list-modal').classList.remove('hidden');
+        }
+
+        // Hide content list modal
+        function hideContentList() {
+            document.getElementById('content-list-modal').classList.add('hidden');
+        }
+
+        // Toggle debug info visibility
+        function toggleDebugInfo() {
+            const debugInfo = document.getElementById('debug-info');
+            debugInfo.classList.toggle('hidden');
+        }
+
+        // Parse presentation content
+        function parsePresentationContent(content) {
+            try {
+                // Try to parse as JSON array
+                if (content.startsWith('[')) {
+                    return JSON.parse(content);
+                }
+                // Otherwise, split by commas
+                return content.split(',').map(url => url.trim()).filter(url => url);
+            } catch (e) {
+                console.error('Error parsing presentation content:', e);
+                return [content]; // Return as single slide if parsing fails
+            }
+        }
+
+        // Navigate presentation slides
+        function navigatePresentation(contentId, direction) {
+            if (!presentationSlides[contentId]) return;
+            
+            const slides = presentationSlides[contentId].slides;
+            let currentIndex = presentationSlides[contentId].currentIndex;
+            
+            if (direction === 'next') {
+                currentIndex = Math.min(slides.length - 1, currentIndex + 1);
+            } else if (direction === 'prev') {
+                currentIndex = Math.max(0, currentIndex - 1);
+            }
+            
+            presentationSlides[contentId].currentIndex = currentIndex;
+            
+            // Update slide display
+            const slideContainer = document.getElementById(`presentation-slide-${contentId}`);
+            const slideCounter = document.getElementById(`slide-counter-${contentId}`);
+            const prevButton = document.getElementById(`prev-slide-${contentId}`);
+            const nextButton = document.getElementById(`next-slide-${contentId}`);
+            
+            if (slideContainer) {
+                // Check if it's an image or PDF
+                const slideUrl = slides[currentIndex];
+                if (slideUrl.match(/\.(jpeg|jpg|gif|png)$/i)) {
+                    slideContainer.innerHTML = `<img src="${slideUrl}" alt="Slide ${currentIndex + 1}">`;
+                } else if (slideUrl.match(/\.(pdf)$/i)) {
+                    slideContainer.innerHTML = `<iframe src="${slideUrl}#toolbar=0"></iframe>`;
+                } else {
+                    slideContainer.innerHTML = `<iframe src="${slideUrl}"></iframe>`;
+                }
+            }
+            
+            if (slideCounter) {
+                slideCounter.textContent = `Slide ${currentIndex + 1} dari ${slides.length}`;
+            }
+            
+            // Update button states
+            if (prevButton) {
+                prevButton.disabled = currentIndex === 0;
+            }
+            if (nextButton) {
+                nextButton.disabled = currentIndex === slides.length - 1;
+            }
+        }
+
+        // Open treasure box
+        function openTreasureBox(contentId) {
+            const content = arContents.find(c => c.id === contentId);
+            if (!content) return;
+            
+            // Check if user is close enough
+            if (content.distance > boxOpenDistance) {
+                alert(`Anda perlu berada dalam jarak ${boxOpenDistance}m untuk membuka kotak harta karun ini. Jarak saat ini: ${Math.round(content.distance)}m`);
+                return;
+            }
+            
+            // Mark box as opened
+            openedBoxes.add(contentId);
+            
+            // Save to localStorage
+            localStorage.setItem('openedBoxes', JSON.stringify([...openedBoxes]));
+            
+            // Show opening animation and reveal content
+            setTimeout(() => {
+                showARContent(content);
+            }, 500);
+        }
+
+        // Load opened boxes from storage
+        function loadOpenedBoxes() {
+            const stored = localStorage.getItem('openedBoxes');
+            if (stored) {
+                openedBoxes = new Set(JSON.parse(stored));
+            }
+        }
+
+        // Show AR content in modal
+        function showARContent(content) {
+            // Create a modal to show the content in detail
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4';
+            
+            let contentHtml = '';
+            
+            if (content.type === 'text') {
+                contentHtml = `<p class="text-gray-800">${content.content}</p>`;
+            } else if (content.type === 'image') {
+                contentHtml = `
+                    <div class="text-center">
+                        <img src="${content.content}" alt="${content.title}" class="max-w-full max-h-[300px] mx-auto rounded-lg">
+                        ${content.description ? `<div class="mt-3 p-3 bg-gray-50 rounded-lg text-left"><p class="text-sm text-gray-700">${content.description}</p></div>` : ''}
+                    </div>
+                `;
+            } else if (content.type === '3d') {
+                // Use model-viewer for 3D models with description
+                contentHtml = `
+                    <div class="text-center">
+                        <model-viewer src="${content.content}" 
+                            alt="${content.title}" 
+                            auto-rotate 
+                            camera-controls 
+                            shadow-intensity="1" 
+                            ar 
+                            ar-modes="webxr scene-viewer quick-look"
+                            touch-action="pan-y">
+                        </model-viewer>
+                        ${content.description ? `<div class="mt-3 p-3 bg-gray-50 rounded-lg text-left"><p class="text-sm text-gray-700">${content.description}</p></div>` : ''}
+                    </div>
+                `;
+            } else if (content.type === 'video') {
+                // Use YouTube embed with controls
+                contentHtml = `
+                    <div class="youtube-container">
+                        <iframe 
+                            src="https://www.youtube.com/embed/${content.content}?autoplay=0&controls=1&rel=0" 
+                            title="${content.title}"
+                            frameborder="0" 
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                            allowfullscreen>
+                        </iframe>
+                    </div>
+                    ${content.description ? `<div class="mt-3 p-3 bg-gray-50 rounded-lg text-left"><p class="text-sm text-gray-700">${content.description}</p></div>` : ''}
+                `;
+            } else if (content.type === 'presentation') {
+                // Parse presentation content
+                const slides = parsePresentationContent(content.content);
+                
+                // Store in global state
+                presentationSlides[content.id] = {
+                    slides: slides,
+                    currentIndex: 0
+                };
+                
+                // Create presentation viewer with navigation controls
+                contentHtml = `
+                    <div class="presentation-container">
+                        <div id="presentation-slide-${content.id}" class="presentation-slide">
+                            <!-- Initial slide will be loaded here -->
+                        </div>
+                        <div id="slide-counter-${content.id}" class="slide-counter">
+                            Slide 1 dari ${slides.length}
+                        </div>
+                        <div class="presentation-controls mt-4">
+                            <button id="prev-slide-${content.id}" class="prev-slide" disabled>Sebelumnya</button>
+                            <button id="next-slide-${content.id}" class="next-slide" ${slides.length <= 1 ? 'disabled' : ''}>Selanjutnya</button>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            modal.innerHTML = `
+                <div class="bg-white rounded-xl max-w-md w-full max-h-[80vh] overflow-y-auto">
+                    <div class="p-4 border-b border-gray-200 flex justify-between items-center">
+                        <h3 class="text-lg font-semibold">${content.title}</h3>
+                        <button class="close-modal text-gray-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="p-4">
+                        ${contentHtml}
+                        <div class="mt-4 text-sm text-gray-500">
+                            Jarak: ${Math.round(content.distance)}m
+                        </div>
+                    </div>
+                    <div class="p-4 border-t border-gray-200">
+                        <button class="navigate-btn w-full bg-blue-600 text-white py-2 rounded-lg">
+                            Navigasi ke lokasi ini
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            // Add event listeners
+            modal.querySelector('.close-modal').addEventListener('click', () => {
+                document.body.removeChild(modal);
+            });
+            
+            modal.querySelector('.navigate-btn').addEventListener('click', () => {
+                targetARContent = content;
+                updateDirectionArrow();
+                document.body.removeChild(modal);
+            });
+            
+            // Add presentation navigation listeners if needed
+            if (content.type === 'presentation') {
+                // Load initial slide
+                navigatePresentation(content.id, 'initial');
+                
+                // Add event listeners for navigation buttons
+                const prevButton = document.getElementById(`prev-slide-${content.id}`);
+                const nextButton = document.getElementById(`next-slide-${content.id}`);
+                
+                if (prevButton) {
+                    prevButton.addEventListener('click', () => {
+                        navigatePresentation(content.id, 'prev');
+                    });
+                }
+                
+                if (nextButton) {
+                    nextButton.addEventListener('click', () => {
+                        navigatePresentation(content.id, 'next');
+                    });
+                }
+            }
+            
+            // Close when clicking outside
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    document.body.removeChild(modal);
+                }
+            });
+        }
+
+        // Toggle between camera and map views
+        function toggleView(view) {
+            if (view === 'camera') {
+                document.getElementById('camera-view').classList.remove('hidden');
+                document.getElementById('map-view').classList.add('hidden');
+            } else if (view === 'map') {
+                document.getElementById('camera-view').classList.add('hidden');
+                document.getElementById('map-view').classList.remove('hidden');
+                
+                // Update map
+                if (studentMap && currentPosition) {
+                    studentMap.invalidateSize();
+                    studentMap.setView([currentPosition.lat, currentPosition.lng], 18);
+                }
+            }
+        }
+
+
+
+        // Initialize the app when the page loads
+        window.onload = initApp;
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'96c1ab8ee6f4d8a3',t:'MTc1NDY4Mzk2My4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
